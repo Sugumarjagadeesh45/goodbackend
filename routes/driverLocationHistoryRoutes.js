@@ -4,18 +4,77 @@ const DriverLocation = require("../models/DriverLocation");
 const router = express.Router();
 
 // Save or update current driver location
+// D:\newapp\fullbackend-main\fullbackend-main_\routes\driverLocationHistoryRoutes.js
+
+
+
+
+
+
+
+// Add to your driverRoutes.js
+router.post('/create-test-driver', async (req, res) => {
+  try {
+    const { driverId, name, phone, password } = req.body;
+    
+    // Check if driver already exists
+    const existingDriver = await Driver.findOne({ driverId });
+    if (existingDriver) {
+      return res.status(400).json({ msg: "Driver already exists" });
+    }
+    
+    // Create new driver
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    const driver = new Driver({
+      driverId,
+      name,
+      phone,
+      passwordHash,
+      status: "Offline",
+      vehicleType: "taxi",
+      location: {
+        type: "Point",
+        coordinates: [0, 0]
+      }
+    });
+    
+    await driver.save();
+    
+    res.status(201).json({
+      success: true,
+      msg: "Test driver created successfully",
+      driver: {
+        driverId: driver.driverId,
+        name: driver.name,
+        phone: driver.phone
+      }
+    });
+  } catch (error) {
+    console.error("Error creating test driver:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+
+// Save or update current driver location
 router.post("/driver-location/update", async (req, res) => {
   try {
-    const { driverId, latitude, longitude, vehicleType, status = "Live" } = req.body;
+    const { driverId, driverName, latitude, longitude, vehicleType, status = "Live" } = req.body;
     
     // Validate required fields
-    if (!driverId || !latitude || !longitude) {
+    if (!driverId || !driverName || !latitude || !longitude) {
       return res.status(400).json({ success: false, error: "Missing required data" });
     }
     
     // Create new location document (not updating existing)
     const location = new DriverLocation({
       driverId,
+      driverName,
       latitude,
       longitude,
       vehicleType,
@@ -29,6 +88,7 @@ router.post("/driver-location/update", async (req, res) => {
       message: "📍 Location saved", 
       location: {
         driverId: location.driverId,
+        driverName: location.driverName,
         latitude: location.latitude,
         longitude: location.longitude,
         vehicleType: location.vehicleType,

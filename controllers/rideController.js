@@ -125,42 +125,46 @@ exports.getRideById = async (req, res) => {
 };
 
 // --- Accept Ride ---
+// Add OTP generation when ride is accepted
 exports.acceptRide = async (req, res) => {
   try {
-    const { driverId } = req.body;
-    const ride = await Ride.findOne({ RAID_ID: req.params.rideId });
+    const { rideId, driverId } = req.body;
+    const ride = await Ride.findOne({ _id: rideId }); // Use _id instead of RAID_ID
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
     if (ride.status !== 'pending') return res.status(400).json({ error: 'Ride already taken' });
     
+    // Generate OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    
     ride.driver = driverId;
     ride.status = 'accepted';
+    ride.otp = otp; // Save OTP to ride
     await ride.save();
 
-    // Emit ride acceptance to user
+    // Get socket instance
     const io = req.app.get('io');
     if (io) {
-      io.to(ride._id.toString()).emit("rideAccepted", {
+      // Notify user that ride was accepted
+      io.to(ride.user.toString()).emit("rideAccepted", {
         rideId: ride._id.toString(),
-        driverId
+        driverId,
+        driverName: req.body.driverName,
+        otp: otp // Send OTP to user
       });
 
-      // Generate and emit OTP
-      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-      ride.otp = otp;
-      await ride.save();
-      
-      io.to(ride._id.toString()).emit("rideOTP", {
+      // Also notify driver with OTP (for verification)
+      io.to(`driver_${driverId}`).emit("rideOTP", {
         rideId: ride._id.toString(),
-        otp
+        otp: otp
       });
     }
 
-    res.json({ success: true, ride });
+    res.json({ success: true, ride, otp });
   } catch (err) {
+    console.error("❌ Error accepting ride:", err);
     res.status(500).json({ error: err.message });
   }
 };
-
 // --- Mark Arrived ---
 exports.markArrived = async (req, res) => {
   try {

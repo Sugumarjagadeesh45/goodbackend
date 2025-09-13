@@ -17,6 +17,54 @@ router.post('/update-location', driverController.updateLocation);
 
 
 
+
+// Add to your driverRoutes.js
+// Add this to your driverRoutes.js or create a test endpoint
+router.post('/create-test-driver', async (req, res) => {
+  try {
+    const { driverId, name, phone, password } = req.body;
+    
+    // Check if driver already exists
+    const existingDriver = await Driver.findOne({ driverId });
+    if (existingDriver) {
+      return res.status(400).json({ msg: "Driver already exists" });
+    }
+    
+    // Create new driver
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    const driver = new Driver({
+      driverId,
+      name,
+      phone,
+      passwordHash,
+      status: "Offline",
+      vehicleType: "taxi",
+      location: {
+        type: "Point",
+        coordinates: [0, 0]
+      }
+    });
+    
+    await driver.save();
+    
+    res.status(201).json({
+      success: true,
+      msg: "Test driver created successfully",
+      driver: {
+        driverId: driver.driverId,
+        name: driver.name,
+        phone: driver.phone
+      }
+    });
+  } catch (error) {
+    console.error("Error creating test driver:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // Add to existing driverRoutes.js
 router.get('/nearby', async (req, res) => {
   try {

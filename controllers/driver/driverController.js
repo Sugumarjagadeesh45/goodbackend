@@ -1,13 +1,15 @@
-
+// D:\newapp\fullbackend-main\fullbackend-main_\controllers\driver\driverController.js
 const Driver = require("../../models/driver/driver");
-const Ride = require('../../models/ride'); // Make sure Ride model is imported!
+const Ride = require("../../models/ride");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
-// Admin create driver
+/**
+ * ✅ Admin create driver
+ */
 const createDriver = async (req, res) => {
   try {
     const { driverId, name, phone, password, vehicleType, latitude, longitude } = req.body;
@@ -28,7 +30,7 @@ const createDriver = async (req, res) => {
       name,
       phone,
       passwordHash,
-      vehicleType,
+      vehicleType: vehicleType || "taxi",
       location: {
         type: "Point",
         coordinates: [longitude, latitude],
@@ -43,26 +45,36 @@ const createDriver = async (req, res) => {
   }
 };
 
-// Driver login
+/**
+ * ✅ Driver login
+ */
 const loginDriver = async (req, res) => {
   try {
     const { driverId, password, latitude, longitude } = req.body;
+    console.log(`🔑 Login attempt for driver: ${driverId}`);
 
     const driver = await Driver.findOne({ driverId });
-    if (!driver) return res.status(404).json({ msg: "Driver not found" });
+    if (!driver) {
+      console.log(`❌ Driver not found: ${driverId}`);
+      return res.status(404).json({ msg: "Driver not found" });
+    }
 
     const match = await bcrypt.compare(password, driver.passwordHash);
-    if (!match) return res.status(401).json({ msg: "Invalid password" });
+    if (!match) {
+      console.log(`❌ Invalid password for driver: ${driverId}`);
+      return res.status(401).json({ msg: "Invalid password" });
+    }
 
+    // Update driver location and status
     if (latitude && longitude) {
       driver.location = {
         type: "Point",
         coordinates: [longitude, latitude],
       };
       driver.status = "Live";
+      driver.lastUpdate = new Date();
       await driver.save();
-
-      console.log(`Driver ${driverId} logged in at latitude: ${latitude}, longitude: ${longitude}`);
+      console.log(`✅ Driver ${driverId} logged in at [${latitude}, ${longitude}]`);
     }
 
     const token = jwt.sign(
@@ -88,20 +100,18 @@ const loginDriver = async (req, res) => {
   }
 };
 
-// Change password
+/**
+ * ✅ Change password
+ */
 const changePassword = async (req, res) => {
   try {
     const { driverId, oldPassword, newPassword } = req.body;
 
     const driver = await Driver.findOne({ driverId });
-    if (!driver) {
-      return res.status(404).json({ msg: "Driver not found" });
-    }
+    if (!driver) return res.status(404).json({ msg: "Driver not found" });
 
     const match = await bcrypt.compare(oldPassword, driver.passwordHash);
-    if (!match) {
-      return res.status(400).json({ msg: "Old password incorrect" });
-    }
+    if (!match) return res.status(400).json({ msg: "Old password incorrect" });
 
     driver.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     driver.mustChangePassword = false;
@@ -114,7 +124,9 @@ const changePassword = async (req, res) => {
   }
 };
 
-// Get all drivers
+/**
+ * ✅ Get all drivers
+ */
 const getDrivers = async (req, res) => {
   try {
     const drivers = await Driver.find().sort({ createdAt: -1 });
@@ -125,7 +137,9 @@ const getDrivers = async (req, res) => {
   }
 };
 
-// Update driver (exclude password updates here)
+/**
+ * ✅ Update driver
+ */
 const updateDriver = async (req, res) => {
   try {
     const { driverId } = req.params;
@@ -146,9 +160,7 @@ const updateDriver = async (req, res) => {
     }
 
     const driver = await Driver.findOneAndUpdate({ driverId }, update, { new: true });
-    if (!driver) {
-      return res.status(404).json({ msg: "Driver not found" });
-    }
+    if (!driver) return res.status(404).json({ msg: "Driver not found" });
 
     res.json(driver);
   } catch (err) {
@@ -157,15 +169,14 @@ const updateDriver = async (req, res) => {
   }
 };
 
-// Delete driver
+/**
+ * ✅ Delete driver
+ */
 const deleteDriver = async (req, res) => {
   try {
     const { driverId } = req.params;
     const deleted = await Driver.findOneAndDelete({ driverId });
-
-    if (!deleted) {
-      return res.status(404).json({ msg: "Driver not found" });
-    }
+    if (!deleted) return res.status(404).json({ msg: "Driver not found" });
 
     res.json({ msg: "Driver deleted" });
   } catch (err) {
@@ -174,7 +185,9 @@ const deleteDriver = async (req, res) => {
   }
 };
 
-// Nearest drivers API
+/**
+ * ✅ Nearest drivers
+ */
 const getNearestDrivers = async (req, res) => {
   try {
     const { latitude, longitude, maxDistance = 5000 } = req.query;
@@ -195,11 +208,12 @@ const getNearestDrivers = async (req, res) => {
   }
 };
 
-// Update location (protected route)
+/**
+ * ✅ Update location (protected)
+ */
 const updateLocation = async (req, res) => {
   try {
     const { driverId } = req.user;
-
     const { latitude, longitude } = req.body;
 
     if (!latitude || !longitude) {
@@ -211,6 +225,7 @@ const updateLocation = async (req, res) => {
       {
         location: { type: "Point", coordinates: [longitude, latitude] },
         status: "Live",
+        lastUpdate: new Date(),
       },
       { new: true }
     );
@@ -224,7 +239,9 @@ const updateLocation = async (req, res) => {
   }
 };
 
-// Logout driver (protected route)
+/**
+ * ✅ Logout driver
+ */
 const logoutDriver = async (req, res) => {
   try {
     const { driverId } = req.user;
@@ -242,29 +259,26 @@ const logoutDriver = async (req, res) => {
   }
 };
 
-// Get ride by ID (protected route)
-// In driverController.js
+/**
+ * ✅ Get ride by ID
+ */
 const getRideById = async (req, res) => {
   try {
     const { rideId } = req.params;
     console.log(`🔍 Fetching ride with RAID_ID: ${rideId}`);
-    
+
     const ride = await Ride.findOne({ RAID_ID: rideId })
       .populate("user", "name customerId phone")
       .populate("driver", "driverId name phone vehicleType");
-      
+
     if (!ride) {
       console.log(`❌ Ride not found with RAID_ID: ${rideId}`);
       return res.status(404).json({ msg: "Ride not found" });
     }
-    
-    // Log the ride object to see what's being returned
-    console.log("Ride object being returned:", ride);
-    
-    // Explicitly return the ride with all fields
+
     res.json({
       _id: ride._id,
-      RAID_ID: ride.RAID_ID, // Ensure this is included
+      RAID_ID: ride.RAID_ID,
       customerId: ride.customerId,
       name: ride.name,
       pickupLocation: ride.pickupLocation,
@@ -275,7 +289,7 @@ const getRideById = async (req, res) => {
       distance: ride.distance,
       status: ride.status,
       user: ride.user,
-      driver: ride.driver
+      driver: ride.driver,
     });
   } catch (err) {
     console.error("❌ Error in getRideById:", err);
@@ -283,56 +297,47 @@ const getRideById = async (req, res) => {
   }
 };
 
-// Update ride status (protected route)
-// In driverController.js, update the updateRideStatus function:
+/**
+ * ✅ Update ride status
+ */
 const updateRideStatus = async (req, res) => {
   try {
     const { rideId } = req.params;
     const { status } = req.body;
     const { driverId } = req.user;
-    
+
     console.log(`🚗 Driver ${driverId} attempting to ${status} ride ${rideId}`);
-    
+
     if (!["Accepted", "Completed", "Cancelled"].includes(status)) {
-      console.log(`❌ Invalid status: ${status}`);
       return res.status(400).json({ msg: "Invalid status" });
     }
-    
+
     const ride = await Ride.findOne({ RAID_ID: rideId }).populate("user");
-    if (!ride) {
-      console.log(`❌ Ride not found with ID: ${rideId}`);
-      return res.status(404).json({ msg: "Ride not found" });
-    }
-    
-    console.log(`📋 Current ride status: ${ride.status}`);
-    
+    if (!ride) return res.status(404).json({ msg: "Ride not found" });
+
     if (status === "Accepted") {
       if (ride.status !== "pending") {
-        console.log(`❌ Ride already taken or completed. Current status: ${ride.status}`);
         return res.status(400).json({ msg: "Ride already taken or completed" });
       }
       ride.driver = driverId;
     }
-    
+
     if (status === "Cancelled") {
       ride.driver = null;
     }
-    
+
     ride.status = status.toLowerCase();
     await ride.save();
-    
-    console.log(`✅ Ride status updated to: ${ride.status}`);
-    
-    const io = req.app.get('io');
+
+    const io = req.app.get("io");
     if (io && ride.user) {
       io.to(ride.user._id.toString()).emit("rideStatusUpdate", {
         rideId: ride.RAID_ID,
         status: ride.status,
         driverId,
       });
-      console.log(`📡 Emitted rideStatusUpdate to user ${ride.user._id}`);
     }
-    
+
     res.json({
       msg: "Ride updated",
       ride: {

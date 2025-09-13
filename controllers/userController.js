@@ -280,7 +280,7 @@ exports.getRegisteredUserById = async (req, res) => {
 };
 
 // Book a ride
-// Book a ride
+// Book a ride - Fix the emission part
 exports.bookRide = async (req, res) => {
   try {
     console.log('🔍 Booking request received:', req.body);
@@ -304,15 +304,6 @@ exports.bookRide = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Missing required booking information'
-      });
-    }
-    
-    // Validate ride type
-    const validRideTypes = ['bike', 'taxi', 'port'];
-    if (!validRideTypes.includes(rideType)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid ride type'
       });
     }
     
@@ -352,24 +343,36 @@ exports.bookRide = async (req, res) => {
     const savedRide = await newRide.save();
     console.log('✅ Ride booked successfully:', savedRide);
     
-    // Get socket instance and emit to all drivers
+    // ✅ FIXED: Get socket instance and emit to all drivers properly
     const io = req.app.get('io');
     if (io) {
       const rideData = {
-        rideId: savedRide._id,
+        rideId: savedRide._id.toString(), // Use MongoDB _id as rideId
+        RAID_ID: savedRide.RAID_ID, // Also include RAID_ID for reference
         customerId: savedRide.customerId,
         name: savedRide.name,
-        pickupLocation: savedRide.pickupLocation,
-        dropoffLocation: savedRide.dropoffLocation,
+        pickup: {
+          address: savedRide.pickupLocation,
+          lat: savedRide.pickupCoordinates.latitude,
+          lng: savedRide.pickupCoordinates.longitude
+        },
+        drop: {
+          address: savedRide.dropoffLocation,
+          lat: savedRide.dropoffCoordinates.latitude,
+          lng: savedRide.dropoffCoordinates.longitude
+        },
         fare: savedRide.fare,
         rideType: savedRide.rideType,
         distance: savedRide.distance,
-        RAID_ID: savedRide.RAID_ID,
         timestamp: new Date()
       };
       
       console.log('📡 Emitting new ride request to all drivers:', rideData);
+      
+      // Emit to all drivers in the "allDrivers" room
       io.to("allDrivers").emit("newRideRequest", rideData);
+    } else {
+      console.log('⚠️ Socket.io instance not available');
     }
     
     res.status(201).json({
@@ -380,12 +383,6 @@ exports.bookRide = async (req, res) => {
     
   } catch (err) {
     console.error("❌ Error booking ride:", err);
-    if (err.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid booking data: ' + err.message
-      });
-    }
     res.status(500).json({
       success: false,
       error: 'Server error while booking ride'
