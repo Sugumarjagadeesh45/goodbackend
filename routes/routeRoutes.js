@@ -2,14 +2,11 @@ const express = require("express");
 const axios = require("axios");
 const router = express.Router();
 
-// 🚖 Get OSRM base URL depending on environment
 const getOSRMUrl = () => {
-  // Use public OSRM as fallback
+
   let url = process.env.OSRM_URL || "https://router.project-osrm.org";
 
-  // If you are developing locally:
-  // - For Android emulator, use 10.0.2.2
-  // - For iOS simulator or direct Node.js, use localhost
+
   if (process.env.NODE_ENV === "development") {
     const isAndroidEmulator = process.env.PLATFORM === "android"; // set manually if needed
     if (isAndroidEmulator) {

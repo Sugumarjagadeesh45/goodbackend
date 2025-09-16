@@ -68,71 +68,139 @@ const init = (server) => {
     console.log(`📱 Total connected clients: ${io.engine.clientsCount}`);
     
     // -------------------- DRIVER REGISTRATION --------------------
-    socket.on("registerDriver", async ({ driverId, driverName, latitude, longitude, vehicleType = "taxi" }) => {
-      try {
-        socket.driverId = driverId;
-        socket.driverName = driverName;
-        
-        // Store driver connection info
-        activeDriverSockets.set(driverId, {
-          socketId: socket.id,
-          driverId,
-          driverName,
-          location: { latitude, longitude },
-          vehicleType,
-          lastUpdate: Date.now(),
-          status: "Live",
-          isOnline: true // Mark driver as online
-        });
-        
-        // Join driver to a room for ride notifications
-        socket.join("allDrivers");
-        socket.join(`driver_${driverId}`);
-        
-        console.log(`\n✅ DRIVER REGISTERED: ${driverName} (${driverId})`);
-        console.log(`📍 Location: ${latitude}, ${longitude}`);
-        console.log(`🚗 Vehicle: ${vehicleType}`);
-        console.log(`🔌 Socket ID: ${socket.id}`);
-        
-        // Save initial location to database
-        await saveDriverLocationToDB(driverId, driverName, latitude, longitude, vehicleType);
-        
-        // Broadcast updated driver list to all users
-        broadcastDriverLocations();
-        
-        // Log current status
-        logDriverStatus();
-        
-      } catch (error) {
-        console.error("❌ Error registering driver:", error);
-      }
+socket.on("registerDriver", async ({ driverId, driverName, latitude, longitude, vehicleType = "taxi" }) => {
+  try {
+    socket.driverId = driverId;
+    socket.driverName = driverName;
+    
+    // Store driver connection info
+    activeDriverSockets.set(driverId, {
+      socketId: socket.id,
+      driverId,
+      driverName,
+      location: { latitude, longitude },
+      vehicleType,
+      lastUpdate: Date.now(),
+      status: "Live",
+      isOnline: true
     });
+    
+    // Join driver to a room for ride notifications
+    socket.join("allDrivers");
+    socket.join(`driver_${driverId}`);
+    
+    console.log(`\n✅ DRIVER REGISTERED: ${driverName} (${driverId})`);
+    console.log(`📍 Location: ${latitude}, ${longitude}`);
+    console.log(`🚗 Vehicle: ${vehicleType}`);
+    console.log(`🔌 Socket ID: ${socket.id}`);
+    
+    // Save initial location to database
+    await saveDriverLocationToDB(driverId, driverName, latitude, longitude, vehicleType);
+    
+    // Broadcast updated driver list to ALL connected users
+    broadcastDriverLocationsToAllUsers();
+    
+    // Log current status
+    logDriverStatus();
+    
+  } catch (error) {
+    console.error("❌ Error registering driver:", error);
+  }
+});
     
     // -------------------- DRIVER LIVE LOCATION UPDATE --------------------
-    socket.on("driverLiveLocationUpdate", async ({ driverId, driverName, lat, lng }) => {
-      try {
-        if (activeDriverSockets.has(driverId)) {
-          const driverData = activeDriverSockets.get(driverId);
-          driverData.location = { latitude: lat, longitude: lng };
-          driverData.lastUpdate = Date.now();
-          driverData.isOnline = true; // Ensure driver is marked as online
-          activeDriverSockets.set(driverId, driverData);
-          
-          console.log(`\n📍 DRIVER LOCATION UPDATE: ${driverName} (${driverId})`);
-          console.log(`🗺️  New location: ${lat}, ${lng}`);
-          console.log(`⏱️  Time since last update: ${Math.floor((Date.now() - driverData.lastUpdate) / 1000)}s`);
-          
-          // Save to database immediately
-          await saveDriverLocationToDB(driverId, driverName, lat, lng, driverData.vehicleType);
-          
-          // Broadcast to all users
-          broadcastDriverLocations();
-        }
-      } catch (error) {
-        console.error("❌ Error updating driver location:", error);
-      }
-    });
+socket.on("driverLiveLocationUpdate", async ({ driverId, driverName, lat, lng }) => {
+  try {
+    if (activeDriverSockets.has(driverId)) {
+      const driverData = activeDriverSockets.get(driverId);
+      driverData.location = { latitude: lat, longitude: lng };
+      driverData.lastUpdate = Date.now();
+      driverData.isOnline = true;
+      activeDriverSockets.set(driverId, driverData);
+      
+      console.log(`\n📍 DRIVER LOCATION UPDATE: ${driverName} (${driverId})`);
+      console.log(`🗺️  New location: ${lat}, ${lng}`);
+      
+      // Save to database immediately
+      await saveDriverLocationToDB(driverId, driverName, lat, lng, driverData.vehicleType);
+      
+      // Broadcast to ALL connected users
+      broadcastDriverLocationsToAllUsers();
+    }
+  } catch (error) {
+    console.error("❌ Error updating driver location:", error);
+  }
+});
+
+
+
+
+
+socket.on("getNearbyDrivers", ({ latitude, longitude, radius = 5000 }) => {
+  try {
+    console.log(`\n🔍 USER REQUESTED NEARBY DRIVERS: ${socket.id}`);
+    console.log(`📍 User location: ${latitude}, ${longitude}`);
     
+    // Get all active drivers (only those who are online)
+    const drivers = Array.from(activeDriverSockets.values())
+      .filter(driver => driver.isOnline)
+      .map(driver => ({
+        driverId: driver.driverId,
+        name: driver.driverName,
+        location: {
+          coordinates: [driver.location.longitude, driver.location.latitude]
+        },
+        vehicleType: driver.vehicleType,
+        status: driver.status,
+        lastUpdate: driver.lastUpdate
+      }));
+    
+    console.log(`📤 Sending ${drivers.length} online drivers to user`);
+    
+    // Send to the requesting client only
+    socket.emit("nearbyDriversResponse", { drivers });
+  } catch (error) {
+    console.error("❌ Error fetching nearby drivers:", error);
+    socket.emit("nearbyDriversResponse", { drivers: [] });
+  }
+});
+
+
+
+function broadcastDriverLocationsToAllUsers() {
+  // Only broadcast drivers who are online
+  const drivers = Array.from(activeDriverSockets.values())
+    .filter(driver => driver.isOnline)
+    .map(driver => ({
+      driverId: driver.driverId,
+      name: driver.driverName,
+      location: {
+        coordinates: [driver.location.longitude, driver.location.latitude]
+      },
+      vehicleType: driver.vehicleType,
+      status: driver.status,
+      lastUpdate: driver.lastUpdate
+    }));
+  
+  // Emit to all connected clients (both users and drivers)
+  io.emit("driverLocationsUpdate", { drivers });
+}
+
+
+// Helper function to calculate distance
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+
     // -------------------- DRIVER STATUS UPDATE --------------------
     socket.on("driverStatusUpdate", async ({ driverId, status }) => {
       try {
@@ -165,36 +233,37 @@ const init = (server) => {
       }
     });
     
-    // -------------------- REQUEST NEARBY DRIVERS --------------------
-    socket.on("requestNearbyDrivers", async ({ latitude, longitude, radius = 5000 }) => {
-      try {
-        console.log(`\n🔍 NEARBY DRIVERS REQUEST from ${socket.id}`);
-        console.log(`📍 User location: ${latitude}, ${longitude}`);
-        console.log(`📏 Search radius: ${radius}m`);
-        
-        // Get all active drivers (only those who are online)
-        const drivers = Array.from(activeDriverSockets.values())
-          .filter(driver => driver.isOnline) // Only include online drivers
-          .map(driver => ({
-            driverId: driver.driverId,
-            name: driver.driverName,
-            location: {
-              coordinates: [driver.location.longitude, driver.location.latitude]
-            },
-            vehicleType: driver.vehicleType,
-            status: driver.status,
-            lastUpdate: driver.lastUpdate
-          }));
-        
-        console.log(`📤 Sending ${drivers.length} online drivers to user`);
-        
-        // Send to the requesting client
-        socket.emit("nearbyDriversResponse", { drivers });
-      } catch (error) {
-        console.error("❌ Error fetching nearby drivers:", error);
-        socket.emit("nearbyDriversResponse", { drivers: [] });
-      }
-    });
+// -------------------- REQUEST NEARBY DRIVERS --------------------
+socket.on("requestNearbyDrivers", ({ latitude, longitude, radius = 5000 }) => {
+  try {
+    console.log(`\n🔍 USER REQUESTED NEARBY DRIVERS: ${socket.id}`);
+    console.log(`📍 User location: ${latitude}, ${longitude}`);
+    console.log(`📏 Search radius: ${radius}m`);
+
+    // Get all active drivers (only those who are online)
+    const drivers = Array.from(activeDriverSockets.values())
+      .filter(driver => driver.isOnline)
+      .map(driver => ({
+        driverId: driver.driverId,
+        name: driver.driverName,
+        location: {
+          coordinates: [driver.location.longitude, driver.location.latitude]
+        },
+        vehicleType: driver.vehicleType,
+        status: driver.status,
+        lastUpdate: driver.lastUpdate
+      }));
+
+    console.log(`📤 Sending ${drivers.length} online drivers to user`);
+
+    // Send to the requesting client only
+    socket.emit("nearbyDriversResponse", { drivers });
+  } catch (error) {
+    console.error("❌ Error fetching nearby drivers:", error);
+    socket.emit("nearbyDriversResponse", { drivers: [] });
+  }
+});
+
     
     // -------------------- BOOK RIDE --------------------
     socket.on("bookRide", (data) => {

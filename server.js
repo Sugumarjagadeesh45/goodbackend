@@ -1,39 +1,35 @@
-// // D:\newapp\fullbackend-main\fullbackend-main_\server.js
-// const mongoose = require("mongoose");
-// const dotenv = require("dotenv");
-// const app = require("./app");
+// const express = require("express");
 // const http = require("http");
-// const socket = require("./socket");
+// const { Server } = require("socket.io");
 
-// dotenv.config();
-
-// mongoose.connect(process.env.MONGODB_URI, {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-//   serverSelectionTimeoutMS: 10000, // 10 sec timeout
-// })
-// .then(() => console.log("✅ MongoDB connected"))
-// .catch((err) => {
-//   console.error("❌ DB connection error:", err.message);
-// });
-
-
+// const app = express();
 // const server = http.createServer(app);
 
-// // init socket.io
-// socket.init(server);
+// const io = new Server(server, {
+//   cors: {
+//     origin: "*",  // allow all for testing
+//     methods: ["GET", "POST"]
+//   }
+// });
 
-// // Make sure the port is 5001
-// const PORT = process.env.PORT || 5001;
+// // Example socket event
+// io.on("connection", (socket) => {
+//   console.log("🔗 Client connected:", socket.id);
 
-// server.listen(PORT, () => {
-//   console.log(`🚀 Server running on http://localhost:${PORT}`);
-//   console.log(`📁 Uploads available at http://localhost:${PORT}/uploads/`);
+//   socket.on("disconnect", () => {
+//     console.log("❌ Client disconnected:", socket.id);
+//   });
+// });
+
+// // 🚀 IMPORTANT: Listen on 0.0.0.0 (not localhost!)
+// server.listen(5001, "0.0.0.0", () => {
+//   console.log("🚀 Server running on port 5001");
 // });
 
 
 
-// D:\newapp\fullbackend-main\fullbackend-main_\server.js
+
+
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const app = require("./app");
@@ -67,39 +63,3 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📁 Uploads available at http://localhost:${PORT}/uploads/`);
 });
-
-
-
-
-
-
-
-
-// // D:\newapp\fullbackend-main\fullbackend-main_\server.js
-// const mongoose = require("mongoose");
-// const dotenv = require("dotenv");
-// const app = require("./app");
-// const http = require("http");
-// const socket = require("./socket");
-
-// dotenv.config();
-
-// mongoose
-//   .connect(process.env.MONGODB_URI, {})
-//   .then(() => console.log("✅ MongoDB connected"))
-//   .catch((err) => {
-//     console.error("DB error:", err);
-//     process.exit(1);
-//   });
-
-// const server = http.createServer(app);
-
-// // init socket.io
-// socket.init(server);
-
-// // Make sure the port is 5001
-// const PORT = process.env.PORT || 5001;
-
-// server.listen(PORT, () => {
-//   console.log(`🚀 Server running on http://localhost:${PORT}`);
-// });

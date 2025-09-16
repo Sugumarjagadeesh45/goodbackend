@@ -3,16 +3,7 @@ const express = require("express");
 const DriverLocation = require("../models/DriverLocation");
 const router = express.Router();
 
-// Save or update current driver location
-// D:\newapp\fullbackend-main\fullbackend-main_\routes\driverLocationHistoryRoutes.js
 
-
-
-
-
-
-
-// Add to your driverRoutes.js
 router.post('/create-test-driver', async (req, res) => {
   try {
     const { driverId, name, phone, password } = req.body;
